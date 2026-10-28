@@ -22,18 +22,18 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          mkdir -p "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/packaging"
+          mkdir -p "pkg/packaging"
           CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -trimpath -ldflags="-s -w" \
-            -o "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/wyrmhoard-companion${{ matrix.goos == 'windows' && '.exe' || '' }}" \
+            -o "pkg/wyrmhoard-companion${{ matrix.goos == 'windows' && '.exe' || '' }}" \
             ./cmd/wyrmhoard-companion
-          cp -r packaging/* "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/packaging/" || true
-          cp README.md "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/"
+          cp -r packaging/* "pkg/packaging/"
+          cp README.md "pkg/"
           cd pkg
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            powershell -NoProfile -Command "Compress-Archive -Path 'starhold-companion-*' -DestinationPath 'starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.zip' -Force"
+            powershell -NoProfile -Command "Compress-Archive -Path 'wyrmhoard-companion.exe','packaging','README.md' -DestinationPath 'starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.zip' -Force"
           else
-            tar czf "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}"
+            tar czf "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" wyrmhoard-companion${{ matrix.goos == 'windows' && '.exe' || '' }} packaging README.md
           fi
       - uses: actions/upload-artifact@v4
         with:
