@@ -34,6 +34,14 @@ tar xzf starhold-companion-linux-amd64.tar.gz && cd starhold-companion-*
 sudo ./packaging/install-linux.sh   # or run without sudo for per-user install
 ```
 
+## Auto-updates
+
+The companion checks GitHub releases once a day (and offers `wyrmhoard-companion
+update` to force it). Updates are verified against the published
+`checksums.txt` and swapped in atomically; a running mpv is never interrupted —
+the new version is picked up the next time the browser starts the host.
+Set `WYRMHOARD_COMPANION_NO_UPDATE=1` to pin a version (managed installs).
+
 ## Build from source
 
 ```sh

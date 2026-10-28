@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const version = "0.1.0"
+const version = "0.1.1"
 
 type config struct {
 	Server string `json:"server"`
@@ -83,6 +83,15 @@ func main() {
 	if runPairCLI() {
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "update" {
+		if err := selfUpdate(); err != nil {
+			fmt.Fprintln(os.Stderr, "update:", err)
+			os.Exit(1)
+		}
+		fmt.Fprintln(os.Stderr, "update: complete (restart the browser to use it)")
+		return
+	}
+	selfUpdateLoop()
 	// Native messaging uses stdin/stdout; logs must go to stderr.
 	in := bufio.NewReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
