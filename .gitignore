@@ -1,2 +1,4 @@
 /wyrmhoard-companion
 /dist/
+*.zip
+*.tar.gz

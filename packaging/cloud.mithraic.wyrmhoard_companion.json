@@ -4,8 +4,9 @@
   "path": "/usr/local/bin/wyrmhoard-companion",
   "type": "stdio",
   "allowed_origins": [
-    "chrome-extension://REPLACE_WITH_EXTENSION_ID/",
-    "edge-extension://REPLACE_WITH_EDGE_EXTENSION_ID/",
-    "gecko-addon://starhold-companion@starhold.space"
+    "chrome-extension://okbmiemolnnocdcmohnggigaolobdbef/"
+  ],
+  "allowed_extensions": [
+    "starhold-companion@starhold.space"
   ]
 }

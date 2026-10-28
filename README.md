@@ -14,30 +14,54 @@ player that can decode anything mpv can — which is everything.
 
 ## Install
 
-1. Grab the release for your OS from
-   [Releases](https://github.com/Wrecht-Dev/starhold-companion/releases/latest):
-   - **Linux**: `starhold-companion-linux-amd64.tar.gz` (also arm64)
-   - **Windows**: `starhold-companion-windows-amd64.zip`
-   - **macOS**: `starhold-companion-darwin-amd64.tar.gz` (Apple Silicon: arm64)
-   - **Browser extension**: `starhold-extension-chrome.zip` (Chrome/Chromium/Edge)
-     or `starhold-extension-firefox.zip` (Firefox 109+)
-2. Unpack it somewhere on your PATH (Linux/macOS: `~/.local/bin` works well).
-3. Install the browser extension for your browser:
-   - Chrome/Chromium/Edge: unzip `starhold-extension-chrome.zip`, enable
-     developer mode in `chrome://extensions`, click "Load unpacked".
-   - Firefox: open `about:debugging#/runtime/this-firefox`, "Load Temporary
-     Add-on…", pick any file inside the unzipped `starhold-extension-firefox`
-     folder (permanent install lands with AMO signing).
-4. In the Starhold web app open **Settings → Companion player** and pair —
-   the app shows a pairing code; run
-   `wyrmhoard-companion pair <server> <code>` to finish.
+One line per OS. Installs the binary, verifies the download against the
+published checksum, and registers the native-messaging manifest for every
+browser it finds (Chrome, Chromium, Edge, Brave, Firefox) — no editing, no
+admin rights.
 
-### Linux one-step
+**Linux / macOS**
 
 ```sh
-tar xzf starhold-companion-linux-amd64.tar.gz && cd starhold-companion-*
-sudo ./packaging/install-linux.sh   # or run without sudo for per-user install
+curl -fsSL https://raw.githubusercontent.com/Wrecht-Dev/starhold-companion/main/install.sh | sh
 ```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/Wrecht-Dev/starhold-companion/main/install.ps1 | iex
+```
+
+**Windows (cmd.exe)**
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/Wrecht-Dev/starhold-companion/main/install.ps1 | iex"
+```
+
+Then two steps remain:
+
+1. **Browser extension** (the native-messaging ID is pre-pinned by the
+   installer — nothing to edit):
+   - Chrome/Chromium/Edge/Brave: unzip
+     [`starhold-extension-chrome.zip`](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)
+     → `chrome://extensions` → Developer mode → **Load unpacked** → pick the
+     unzipped folder.
+   - Firefox: unzip
+     [`starhold-extension-firefox.zip`](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)
+     → `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
+     pick `manifest.json` from the unzipped folder. (Permanent install lands
+     with AMO signing.)
+   - Both extension zips are also served straight from your own server:
+     `https://<your-server>/companion-extension.zip` and
+     `https://<your-server>/companion-extension-firefox.zip`.
+2. **Pair**: in the Starhold web app open **Settings → Companion** → start
+   pairing → the extension picks it up (or run
+   `wyrmhoard-companion pair <server-url> <code>` from a terminal).
+
+Manual install: download a release archive
+([Releases](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)),
+unpack the binary onto your PATH, and copy
+`packaging/cloud.mithraic.wyrmhoard_companion.json` into your browser's
+`NativeMessagingHosts` directory with the binary path filled in.
 
 ## Embedded playback (play in the page, no window)
 
@@ -58,6 +82,12 @@ Safety of the local stream, in brief:
 Chrome shows a one-time "allow local network access" prompt the first time;
 after that it is silent.
 
+## Windowed playback
+
+The classic path still works: `play` opens the file in a real mpv window with
+the original bytes (zero re-encode). The web player offers whichever mode fits
+— in-page when you want it, windowed when you want the full mpv UI.
+
 ## Auto-updates
 
 The companion checks GitHub releases once a day (and offers `wyrmhoard-companion
@@ -76,7 +106,7 @@ Releases are built automatically by GitHub Actions on tagged versions.
 
 ## Security model
 
-- No local network listener; all traffic is stdio native-messaging + direct
-  HTTPS to your Starhold server.
+- No background network listener. The only socket the companion ever opens is
+  the loopback relay during embedded playback, gated as described above.
 - Only plays media from the paired server URL; arbitrary URLs/files are refused.
 - Pairing tokens are device-scoped and revocable from the web app.
