@@ -132,6 +132,14 @@ case ":${PATH}:" in
     fi ;;
 esac
 
+# --- extension identity ----------------------------------------------------
+# The ID is derived from the signing key pinned in extension/manifest.json, so
+# both the CRX served by the server and the zips share it. The native-messaging
+# manifests must allow exactly this origin.
+EXT_ID="dgcgodfjhghjbmmgehkgkgnoleacdimf"
+SERVER="${STARHOLD_SERVER:-https://starhold.space}"
+UPDATE_URL="${SERVER%/}/companion/update.xml"
+
 # --- native messaging manifests --------------------------------------------
 # The manifest file itself is embedded here so we never need a git checkout.
 manifest_tmp="${tmpdir}/${MANIFEST_ID}.json"
@@ -141,52 +149,153 @@ cat > "$manifest_tmp" <<EOF
   "description": "Starhold Companion — plays media from your Starhold server",
   "path": "${BIN_PATH}",
   "type": "stdio",
-  "allowed_origins": ["chrome-extension://okbmiemolnnocdcmohnggigaolobdbef/"],
+  "allowed_origins": ["chrome-extension://${EXT_ID}/"],
   "allowed_extensions": ["starhold-companion@starhold.space"]
 }
 EOF
 
-wrote=0
-register_chromium() { # $1 = native hosts dir
-  [ -d "$1" ] || mkdir -p "$1" 2>/dev/null || return 1
-  cp "$manifest_tmp" "$1/${MANIFEST_ID}.json" 2>/dev/null || return 1
-  wrote=$((wrote + 1))
-}
-
-for base in "${HOME}/.config" "${HOME}/.var/app"; do
-  register_chromium "${base}/google-chrome/NativeMessagingHosts" && log "registered: Google Chrome" || true
-  register_chromium "${base}/chromium/NativeMessagingHosts" && log "registered: Chromium" || true
-  register_chromium "${base}/BraveSoftware/Brave-Browser/NativeMessagingHosts" && log "registered: Brave" || true
-  register_chromium "${base}/microsoft-edge/NativeMessagingHosts" && log "registered: Microsoft Edge" || true
-done
-# Firefox (per-user)
-register_chromium "${HOME}/.mozilla/native-messaging-hosts" && log "registered: Firefox" || true
-register_chromium "${HOME}/.librewolf/native-messaging-hosts" && log "registered: LibreWolf" || true
-
-if [ "$wrote" -eq 0 ]; then
-  warn "no browser manifest directories could be written — install a browser first, then re-run"
+# Per-user host dirs (no privileges needed) and, when we can get sudo, the
+# system-wide dirs so an admin-force-installed extension can still reach us.
+personal_dirs=""
+if [ "$os_id" = "darwin" ]; then
+  personal_dirs="${HOME}/Library/Application Support/Google/Chrome/NativeMessagingHosts
+${HOME}/Library/Application Support/Chromium/NativeMessagingHosts
+${HOME}/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts
+${HOME}/Library/Application Support/Microsoft Edge/NativeMessagingHosts
+${HOME}/Library/Application Support/Mozilla/NativeMessagingHosts"
+else
+  personal_dirs="${HOME}/.config/google-chrome/NativeMessagingHosts
+${HOME}/.config/chromium/NativeMessagingHosts
+${HOME}/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts
+${HOME}/.config/microsoft-edge/NativeMessagingHosts
+${HOME}/.config/vivaldi/NativeMessagingHosts
+${HOME}/.var/app/org.chromium.Chromium/config/chromium/NativeMessagingHosts
+${HOME}/.mozilla/native-messaging-hosts
+${HOME}/.librewolf/native-messaging-hosts"
 fi
 
+register_manifest() { # $1 = manifest dir
+  mkdir -p "$1" 2>/dev/null || return 1
+  cp "$manifest_tmp" "$1/${MANIFEST_ID}.json" 2>/dev/null || return 1
+  log "native host registered: ${1}"
+}
+
+wrote=0
+while IFS= read -r d; do
+  [ -n "$d" ] || continue
+  register_manifest "$d" && wrote=$((wrote + 1)) || true
+done <<EOF
+$personal_dirs
+EOF
+
+# --- browser extension: zero-click install via enterprise policy -----------
+# Chrome-family browsers accept a self-hosted CRX3 when an admin policy forces
+# it. Chrome, Chromium, Edge, Brave and Vivaldi all honour this. It needs root
+# (Linux policy dirs, macOS managed prefs), so we ask once and degrade cleanly.
+policy_json=$(cat <<EOF
+{
+  "ExtensionInstallForcelist": ["${EXT_ID};${UPDATE_URL}"],
+  "ExtensionSettings": {
+    "${EXT_ID}": {
+      "installation_mode": "force_installed",
+      "update_url": "${UPDATE_URL}",
+      "toolbar_pin": "force_pinned"
+    }
+  }
+}
+EOF
+)
+policy_tmp="${tmpdir}/starhold-policy.json"
+printf '%s\n' "$policy_json" > "$policy_tmp"
+
+have_sudo=0
+if [ "$(id -u)" -eq 0 ]; then have_sudo=1
+elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then have_sudo=1
+elif command -v sudo >/dev/null 2>&1; then
+  log "the browser extension installs system-wide and needs sudo once"
+  sudo -v 2>/dev/null && have_sudo=1 || true
+fi
+
+policy_written=0
+install_policy_dir() { # $1 = managed policy dir
+  [ "$have_sudo" = "1" ] || return 1
+  sudo mkdir -p "$1" 2>/dev/null || return 1
+  sudo cp "$policy_tmp" "$1/starhold-companion.json" 2>/dev/null || return 1
+  log "extension policy written: ${1}"
+  policy_written=$((policy_written + 1))
+}
+
+if [ "$os_id" = "linux" ]; then
+  install_policy_dir /etc/opt/chrome/policies/managed || true
+  install_policy_dir /etc/chromium/policies/managed || true
+  install_policy_dir /etc/opt/edge/policies/managed || true
+  install_policy_dir /etc/brave/policies/managed || true
+  install_policy_dir /etc/opt/vivaldi/policies/managed || true
+  if [ "$have_sudo" = "1" ]; then
+    for d in /etc/opt/chrome/native-messaging-hosts /etc/chromium/native-messaging-hosts \
+             /etc/opt/edge/native-messaging-hosts /etc/brave/native-messaging-hosts; do
+      sudo mkdir -p "$d" 2>/dev/null && sudo cp "$manifest_tmp" "$d/${MANIFEST_ID}.json" 2>/dev/null || true
+    done
+  fi
+else
+  # macOS: Chrome-family reads machine-managed preferences from /Library.
+  for dom in com.google.Chrome org.chromium.Chromium com.microsoft.Edge com.brave.Browser com.vivaldi.Vivaldi; do
+    plist="/Library/Managed Preferences/${dom}.plist"
+    if [ "$have_sudo" = "1" ]; then
+      plist_tmp="${tmpdir}/${dom}.plist"
+      plutil -create xml1 "$plist_tmp" 2>/dev/null && \
+        plutil -insert ExtensionInstallForcelist -array "$plist_tmp" 2>/dev/null && \
+        plutil -insert ExtensionInstallForcelist.0 -string "${EXT_ID};${UPDATE_URL}" "$plist_tmp" 2>/dev/null && \
+        sudo mkdir -p "/Library/Managed Preferences" 2>/dev/null && \
+        sudo cp "$plist_tmp" "$plist" 2>/dev/null && \
+        { log "extension policy written: ${plist}"; policy_written=$((policy_written + 1)); } || true
+    fi
+  done
+fi
+
+# --- Firefox ---------------------------------------------------------------
+# Mozilla force-installs only add-ons signed by addons.mozilla.org, so a
+# self-hosted XPI cannot be policy-installed and there is nothing to automate:
+# release builds require one confirmation click (see the notes below).
 # --- what's left -----------------------------------------------------------
 cat <<EOF
 
   Starhold Companion ${VERSION} installed.
+  extension id: ${EXT_ID}
 
-  Remaining steps:
+EOF
 
-  1. Browser extension (the manifest ID is already pinned — no editing)
-     - Chrome/Edge/Brave: Menu → Extensions → Manage Extensions →
-       Developer mode → Load unpacked → choose the folder you unzipped
-       starhold-extension-chrome.zip into (zip is on the ${REPO}
-       releases page)
-     - Firefox: about:debugging → This Firefox → Load Temporary Add-on →
-       pick manifest.json from the unzipped starhold-extension-firefox.zip
+if [ "$policy_written" -gt 0 ]; then
+  cat <<EOF
+  The browser extension is installed for you: restart every browser once and it
+  appears pinned to the toolbar (Chrome, Chromium, Edge, Brave, Vivaldi).
 
-  2. Pair with your server
-     - Open the Starhold web app → Settings → Companion → Start pairing.
-       The extension asks for the code on its own — type it in the browser
-       and you are done. (Terminal alternative, no angle brackets, spaces
-       between the parts:  wyrmhoard-companion pair https://your.server YOUR-CODE)
+EOF
+else
+  cat <<EOF
+  Automatic extension install needs admin rights (sudo) to write the browser
+  policy. Re-run with sudo, or install it by hand once:
+    1. download ${SERVER%/}/companion-extension.zip and unzip it
+    2. chrome://extensions -> Developer mode -> Load unpacked -> pick the folder
+
+EOF
+fi
+
+if command -v firefox >/dev/null 2>&1; then
+  cat <<EOF
+  Firefox: release builds only install add-ons signed by Mozilla, so this one
+  needs a single confirmation — open about:debugging#/runtime/this-firefox,
+  "Load Temporary Add-on", and pick manifest.json from the unzipped
+  companion-extension-firefox.zip.
+
+EOF
+fi
+
+cat <<EOF
+  Pair with your server
+  - Open the Starhold web app -> Settings -> Companion -> Start pairing.
+  - The extension asks for the code on its own; type it in the browser.
+  - Terminal alternative:  wyrmhoard-companion pair ${SERVER} YOUR-CODE
 
   The companion updates itself from GitHub releases automatically
   (opt out with WYRMHOARD_COMPANION_NO_UPDATE=1).

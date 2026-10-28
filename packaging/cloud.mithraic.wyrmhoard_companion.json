@@ -4,7 +4,7 @@
   "path": "/usr/local/bin/wyrmhoard-companion",
   "type": "stdio",
   "allowed_origins": [
-    "chrome-extension://okbmiemolnnocdcmohnggigaolobdbef/"
+    "chrome-extension://dgcgodfjhghjbmmgehkgkgnoleacdimf/"
   ],
   "allowed_extensions": [
     "starhold-companion@starhold.space"

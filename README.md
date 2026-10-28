@@ -46,34 +46,54 @@ Two things to know up front:
   `wyrmhoard-companion`. Same thing — the binary name predates the rename.
   It is the Starhold Companion.
 
-Then two steps remain:
+The installer also sets up the browser extension for you. It writes the
+browser's enterprise policy so the extension is **force-installed from a
+self-hosted CRX3** (no Web Store listing, no developer mode, no unpacked
+folder) and registers the native-messaging host for every browser it finds.
 
-1. **Browser extension** (the native-messaging ID is pre-pinned by the
-   installer — nothing to edit):
-   - Chrome/Chromium/Edge/Brave: unzip
-     [`starhold-extension-chrome.zip`](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)
-     → `chrome://extensions` → Developer mode → **Load unpacked** → pick the
-     unzipped folder.
-   - Firefox: unzip
-     [`starhold-extension-firefox.zip`](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)
-     → `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
-     pick `manifest.json` from the unzipped folder. Note: Firefox drops
-     temporary add-ons on every restart — reload it via the same page after
-     restarting the browser. (A permanently-signed install lands once AMO
-     review finishes.)
-   - Both extension zips are also served straight from your own server:
-     `https://<your-server>/companion-extension.zip` and
-     `https://<your-server>/companion-extension-firefox.zip`.
-2. **Pair**: in the Starhold web app open **Settings → Companion** → start
-   pairing. The extension asks for the code by itself — type it in the
-   browser and you are done. (Terminal alternative, no angle brackets:
-   `wyrmhoard-companion pair https://your.server YOUR-CODE`)
+| Browser | Linux | macOS | Windows |
+|---|---|---|---|
+| Chrome / Chromium | ✅ policy (needs `sudo`) | ✅ managed prefs (needs `sudo`) | ✅ HKCU registry, HKLM when elevated |
+| Edge / Brave / Vivaldi | ✅ policy | ✅ managed prefs | ✅ registry |
+| Firefox | ⚠️ one click — Mozilla only force-installs AMO-signed add-ons | ⚠️ same | ⚠️ same |
+| Safari | ❌ needs a signed app extension (out of scope) | ❌ | — |
+
+Restart each browser once after installing; the extension appears pinned to
+the toolbar and the native host is already registered, so **Settings →
+Companion → Start pairing** in the web app is the only step left. If the
+installer had no admin rights it prints the exact two-line manual fallback.
+
+- The extension id is `dgcgodfjhghjbmmgehkgkgnoleacdimf`, derived from the
+  signing key pinned in `extension/manifest.json`. The same key signs the CRX
+  served at `https://<your-server>/companion/starhold-extension.crx` with the
+  update manifest at `https://<your-server>/companion/update.xml`
+  (override the server with `STARHOLD_SERVER=https://your.server`).
+- Firefox release builds refuse self-hosted add-ons: the installer prints the
+  one-time `about:debugging` step. A permanently signed AMO release removes
+  it. Safari needs a notarized app-extension bundle, which this project does
+  not ship.
+- Both extension zips are also downloadable from your server
+  (`/companion-extension.zip`, `/companion-extension-firefox.zip`).
+
+**Pair**: in the Starhold web app open **Settings → Companion** → start
+pairing. The extension asks for the code by itself — type it in the browser
+and you are done. (Terminal alternative, no angle brackets:
+`wyrmhoard-companion pair https://your.server YOUR-CODE`)
 
 Manual install: download a release archive
 ([Releases](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)),
 unpack the binary onto your PATH, and copy
 `packaging/cloud.mithraic.wyrmhoard_companion.json` into your browser's
 `NativeMessagingHosts` directory with the binary path filled in.
+
+Building the self-hosted extension package yourself:
+
+```sh
+# create/lock the signing key once; keep it — the extension id derives from it
+go run ./cmd/crx3 -dir extension -key ~/.starhold/ext-signing-key.pem \
+  -codebase https://your.server/companion/starhold-extension.crx \
+  -crx starhold-extension.crx -xml update.xml
+```
 
 ## Embedded playback (play in the page, no window)
 

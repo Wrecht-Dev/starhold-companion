@@ -17,7 +17,9 @@ $ErrorActionPreference = 'Stop'
 $Repo = 'Wrecht-Dev/starhold-companion'
 $BinName = 'wyrmhoard-companion.exe'
 $ManifestId = 'cloud.mithraic.wyrmhoard_companion'
-$ExtId = 'okbmiemolnnocdcmohnggigaolobdbef'
+$ExtId = 'dgcgodfjhghjbmmgehkgkgnoleacdimf'
+$Server = if ($env:STARHOLD_SERVER) { $env:STARHOLD_SERVER.TrimEnd('/') } else { 'https://starhold.space' }
+$UpdateUrl = "$Server/companion/update.xml"
 $InstallDir = Join-Path $env:LOCALAPPDATA 'StarholdCompanion'
 
 function Log($m)  { Write-Host "==> $m" -ForegroundColor Cyan }
@@ -67,7 +69,7 @@ try {
     Log "added $InstallDir to your user PATH"
   }
 
-  # --- native messaging manifest --------------------------------------------
+    # --- native messaging manifest --------------------------------------------
   $manifest = @{
     name               = $ManifestId
     description        = 'Starhold companion player'
@@ -79,36 +81,78 @@ try {
   $manifestPath = Join-Path $InstallDir "$ManifestId.json"
   $manifest | Out-File -FilePath $manifestPath -Encoding ascii
 
-  # HKCU registry keys (per-user, no admin needed)
   $roots = @(
     'HKCU:\Software\Google\Chrome\NativeMessagingHosts',
+    'HKCU:\Software\Chromium\NativeMessagingHosts',
     'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts',
     'HKCU:\Software\BraveSoftware\Brave-Browser\NativeMessagingHosts',
+    'HKCU:\Software\Vivaldi\NativeMessagingHosts',
     'HKCU:\Software\Mozilla\NativeMessagingHosts'
   )
   foreach ($root in $roots) {
     if (-not (Test-Path $root)) { New-Item -Path $root -Force | Out-Null }
     Set-ItemProperty -Path $root -Name $ManifestId -Value $manifestPath
-    Log "registered: $($root.Split('\')[-2])"
+    Log "native host registered: $root"
+  }
+
+  # --- browser extension: zero-click install via enterprise policy ----------
+  # Chrome-family browsers honour a self-hosted CRX3 when a policy forces it.
+  # HKCU policies work without admin for Chrome/Edge/Brave on Windows; HKLM
+  # (system-wide) is written too when the shell is elevated.
+  $policyValue = "$ExtId;$UpdateUrl"
+  $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+  $browserPolRoots = @(
+    'Software\Policies\Google\Chrome',
+    'Software\Policies\Chromium',
+    'Software\Policies\Microsoft\Edge',
+    'Software\Policies\BraveSoftware\Brave',
+    'Software\Policies\Vivaldi'
+  )
+  $policyTargets = @('HKCU:') + @(if ($isAdmin) { 'HKLM:' } else { @() })
+  $policyWritten = 0
+  foreach ($hive in $policyTargets) {
+    foreach ($root in $browserPolRoots) {
+      $path = "$hive\$root\ExtensionInstallForcelist"
+      try {
+        if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+        Set-ItemProperty -Path $path -Name '1' -Value $policyValue
+        $policyWritten++
+      } catch { Warn "could not write policy $path : $($_.Exception.Message)" }
+    }
+  }
+  if ($policyWritten -gt 0) { Log "extension policy written for $policyWritten browser policy keys ($ExtId)" }
+  if (-not $isAdmin) {
+    Warn 'run the installer from an elevated PowerShell to also cover HKLM (other Windows users)'
   }
 } finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
 
-# --- what's left -------------------------------------------------------------
+# --- Firefox ---------------------------------------------------------------
+# Mozilla only force-installs add-ons signed by addons.mozilla.org, so a
+# self-hosted XPI cannot be policy-installed. Temporary add-on is one click.
+$firefox = Get-Command firefox -ErrorAction SilentlyContinue
+if ($firefox) {
+  Warn 'Firefox: release builds need one confirmation — about:debugging#/runtime/this-firefox -> Load Temporary Add-on -> manifest.json from companion-extension-firefox.zip'
+}
+
+# --- what's left -----------------------------------------------------------
 Write-Host ''
-Write-Host "  Starhold Companion installed."
+Write-Host "  Starhold Companion installed.  extension id: $ExtId"
 Write-Host ''
-Write-Host '  Remaining steps:'
-Write-Host '  1. Browser extension (the manifest ID is already pinned - no editing)'
-Write-Host '     - Chrome/Edge/Brave: Menu > Extensions > Manage Extensions >'
-Write-Host '       Developer mode > Load unpacked > choose the folder you unzipped'
-Write-Host '       starhold-extension-chrome.zip into (zip is on the GitHub releases page)'
-Write-Host '     - Firefox: about:debugging > This Firefox > Load Temporary Add-on >'
-Write-Host '       pick manifest.json from the unzipped starhold-extension-firefox.zip'
-Write-Host '  2. Pair with your server'
-Write-Host '     - Starhold web app: Settings > Companion > start pairing,'
-Write-Host '       enter the code when the extension asks for it.'
+if ($policyWritten -gt 0) {
+  Write-Host '  The browser extension is installed for you: restart every browser once'
+  Write-Host '  and it appears pinned to the toolbar (Chrome, Edge, Brave, Chromium).'
+} else {
+  Write-Host '  Could not write the browser policy - install the extension by hand once:'
+  Write-Host "    $Server/companion-extension.zip  ->  unzip  ->  chrome://extensions  ->"
+  Write-Host '    Developer mode  ->  Load unpacked'
+}
+Write-Host ''
+Write-Host '  Pair with your server'
+Write-Host '  - Starhold web app: Settings > Companion > start pairing'
+Write-Host "  - or:  $InstallDir\\wyrmhoard-companion.exe pair $Server YOUR-CODE"
 Write-Host ''
 Write-Host '  The companion updates itself from GitHub releases automatically'
 Write-Host '  (opt out with WYRMHOARD_COMPANION_NO_UPDATE=1).'

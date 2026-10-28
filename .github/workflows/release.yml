@@ -49,6 +49,22 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq zip >/dev/null
           cd extension && zip -q -r ../starhold-extension-chrome.zip . && cd ..
           cd extension-firefox && zip -q -r ../starhold-extension-firefox.zip . && cd ..
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - name: Build self-hosted CRX3 + update manifest
+        env:
+          EXTENSION_SIGNING_KEY: ${{ secrets.EXTENSION_SIGNING_KEY }}
+        run: |
+          if [ -z "${EXTENSION_SIGNING_KEY}" ]; then
+            echo "::warning::EXTENSION_SIGNING_KEY not set - skipping CRX build"
+            exit 0
+          fi
+          printf "%s" "${EXTENSION_SIGNING_KEY}" | base64 -d > /tmp/ext.pem
+          chmod 600 /tmp/ext.pem
+          go run ./cmd/crx3 -dir extension -key /tmp/ext.pem \
+            -codebase "https://github.com/Wrecht-Dev/starhold-companion/releases/latest/download/starhold-extension.crx" \
+            -crx starhold-extension.crx -xml update.xml
+          rm -f /tmp/ext.pem
       - uses: actions/download-artifact@v4
         with: { merge-multiple: true, path: dist }
       - name: Generate checksums
@@ -63,4 +79,6 @@ jobs:
             checksums.txt
             starhold-extension-chrome.zip
             starhold-extension-firefox.zip
+            starhold-extension.crx
+            update.xml
           generate_release_notes: true
