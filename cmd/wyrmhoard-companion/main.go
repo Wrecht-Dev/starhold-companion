@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const version = "0.1.1"
+const version = "0.2.0"
 
 type config struct {
 	Server string `json:"server"`
@@ -42,10 +42,15 @@ type request struct {
 	URL       string  `json:"url"`
 	ItemID    string  `json:"item_id"`
 	ChannelID string  `json:"channel_id"`
+	SessionID string  `json:"session_id"`
 	Command   string  `json:"command"`
 	Value     any     `json:"value"`
 	Start     float64 `json:"start"`
 	Title     string  `json:"title"`
+	// Embedded requests the in-page player path (headless mpv → loopback
+	// fMP4 stream consumed by the web app's own <video> element; no window).
+	Embedded  bool `json:"embedded,omitempty"`
+	AudioOnly bool `json:"audio_only,omitempty"`
 }
 
 type response struct {
@@ -60,6 +65,18 @@ type response struct {
 	Position float64 `json:"position,omitempty"`
 	Duration float64 `json:"duration,omitempty"`
 	Mpv      bool    `json:"mpv,omitempty"`
+	// Embedded playback
+	StreamURL string         `json:"stream_url,omitempty"`
+	SessionID string         `json:"session_id,omitempty"`
+	Playback  *playbackState `json:"playback,omitempty"`
+}
+
+// playbackState is the transport state of an embedded session.
+type playbackState struct {
+	Position float64 `json:"position"`
+	Duration float64 `json:"duration"`
+	Paused   bool    `json:"paused"`
+	Ended    bool    `json:"ended"`
 }
 
 type mpv struct {
@@ -180,7 +197,14 @@ func handle(req request) response {
 	case "pair":
 		return pair(req)
 	case "play":
+		if req.Embedded {
+			return playEmbedded(req)
+		}
 		return play(req)
+	case "embedded_status":
+		return embeddedStatus(req)
+	case "embedded_stop":
+		return embeddedStop(req)
 	case "control":
 		return control(req)
 	case "status":
@@ -277,6 +301,9 @@ func play(req request) response {
 }
 
 func control(req request) response {
+	if req.SessionID != "" {
+		return embeddedControl(req)
+	}
 	player.mu.Lock()
 	cmd := player.cmd
 	sock := player.socket
@@ -425,8 +452,22 @@ func ipc(sock string, cmd []any) error {
 	}
 	defer conn.Close()
 	b, _ := json.Marshal(map[string]any{"command": cmd})
-	_, err = conn.Write(append(b, '\n'))
-	return err
+	if _, err := conn.Write(append(b, '\n')); err != nil {
+		return err
+	}
+	// Drain the reply so mpv never sees a broken pipe; surface mpv-level
+	// errors ("success" vs anything else) instead of fire-and-forget.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var rep struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(conn).Decode(&rep); err != nil {
+		return nil // no reply in time is not fatal; the command was delivered
+	}
+	if rep.Error != "" && rep.Error != "success" {
+		return errors.New("mpv: " + rep.Error)
+	}
+	return nil
 }
 
 func ipcGet(sock, prop string) (float64, error) {

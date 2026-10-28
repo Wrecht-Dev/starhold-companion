@@ -39,6 +39,25 @@ tar xzf starhold-companion-linux-amd64.tar.gz && cd starhold-companion-*
 sudo ./packaging/install-linux.sh   # or run without sudo for per-user install
 ```
 
+## Embedded playback (play in the page, no window)
+
+When the web player cannot decode a file directly, the paired companion can
+play it *inside the browser page*: it runs mpv headlessly on your desktop,
+decodes the original file, and re-serves it as a fragmented MP4 stream on a
+`127.0.0.1`-only local port. The page's own `<video>` element consumes that
+stream (MediaSource), so pause/seek/volume/fullscreen all work with the
+regular player controls and no second window ever opens.
+
+Safety of the local stream, in brief:
+- binds loopback only, on a random port, per session;
+- requires a per-session 128-bit URL token that never touches disk;
+- answers requests only from your paired server's web origin;
+- device token rides IPC-configured headers, never argv or URLs;
+- tears down mpv and the listener the moment the tab disconnects.
+
+Chrome shows a one-time "allow local network access" prompt the first time;
+after that it is silent.
+
 ## Auto-updates
 
 The companion checks GitHub releases once a day (and offers `wyrmhoard-companion
