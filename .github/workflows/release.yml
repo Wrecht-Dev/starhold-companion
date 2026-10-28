@@ -1,0 +1,58 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest, goos: linux, goarch: amd64 }
+          - { os: ubuntu-latest, goos: linux, goarch: arm64 }
+          - { os: windows-latest, goos: windows, goarch: amd64 }
+          - { os: macos-latest, goos: darwin, goarch: amd64 }
+          - { os: macos-latest, goos: darwin, goarch: arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+      - name: Build
+        shell: bash
+        run: |
+          mkdir -p "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/packaging"
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -trimpath -ldflags="-s -w" \
+            -o "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/wyrmhoard-companion${{ matrix.goos == 'windows' && '.exe' || '' }}" \
+            ./cmd/wyrmhoard-companion
+          cp -r packaging/* "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/packaging/" || true
+          cp README.md "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/"
+          cd pkg
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip -q -r "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.zip" "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}"
+          else
+            tar czf "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: pkg/starhold-companion-*
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package browser extension
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq zip >/dev/null
+          cd extension && zip -q -r ../starhold-extension.zip . && cd ..
+      - uses: actions/download-artifact@v4
+        with: { merge-multiple: true, path: dist }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+            starhold-extension.zip
+          generate_release_notes: true
