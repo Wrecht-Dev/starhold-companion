@@ -19,10 +19,15 @@ player that can decode anything mpv can — which is everything.
    - **Linux**: `starhold-companion-linux-amd64.tar.gz` (also arm64)
    - **Windows**: `starhold-companion-windows-amd64.zip`
    - **macOS**: `starhold-companion-darwin-amd64.tar.gz` (Apple Silicon: arm64)
-   - **Browser extension**: `starhold-extension.zip` (Chrome/Chromium/Firefox)
+   - **Browser extension**: `starhold-extension-chrome.zip` (Chrome/Chromium/Edge)
+     or `starhold-extension-firefox.zip` (Firefox 109+)
 2. Unpack it somewhere on your PATH (Linux/macOS: `~/.local/bin` works well).
-3. Install the browser extension from `starhold-extension.zip`
-   (Chrome: load unpacked in `chrome://extensions` developer mode).
+3. Install the browser extension for your browser:
+   - Chrome/Chromium/Edge: unzip `starhold-extension-chrome.zip`, enable
+     developer mode in `chrome://extensions`, click "Load unpacked".
+   - Firefox: open `about:debugging#/runtime/this-firefox`, "Load Temporary
+     Add-on…", pick any file inside the unzipped `starhold-extension-firefox`
+     folder (permanent install lands with AMO signing).
 4. In the Starhold web app open **Settings → Companion player** and pair —
    the app shows a pairing code; run
    `wyrmhoard-companion pair <server> <code>` to finish.

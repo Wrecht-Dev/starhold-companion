@@ -44,10 +44,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Package browser extension
+      - name: Package browser extensions (Chrome + Firefox)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq zip >/dev/null
-          cd extension && zip -q -r ../starhold-extension.zip . && cd ..
+          cd extension && zip -q -r ../starhold-extension-chrome.zip . && cd ..
+          cd extension-firefox && zip -q -r ../starhold-extension-firefox.zip . && cd ..
       - uses: actions/download-artifact@v4
         with: { merge-multiple: true, path: dist }
       - name: Generate checksums
@@ -60,5 +61,6 @@ jobs:
           files: |
             dist/*
             checksums.txt
-            starhold-extension.zip
+            starhold-extension-chrome.zip
+            starhold-extension-firefox.zip
           generate_release_notes: true
