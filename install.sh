@@ -42,6 +42,46 @@ esac
 command -v curl >/dev/null 2>&1 || die "curl is required (install it and re-run)"
 command -v tar >/dev/null 2>&1 || die "tar is required"
 
+# --- mpv: the actual decoder ------------------------------------------------
+# The companion drives an installed mpv. Without it nothing plays. Try the
+# native package manager where one exists (needs sudo on most distros).
+if ! command -v mpv >/dev/null 2>&1; then
+  log "mpv is not installed — it is the actual media decoder"
+  installed_mpv=0
+  if [ "$os_id" = "linux" ]; then
+    if command -v apt-get >/dev/null 2>&1; then
+      (sudo apt-get update -qq && sudo apt-get install -y mpv) 2>/dev/null && installed_mpv=1
+    elif command -v dnf >/dev/null 2>&1; then
+      (sudo dnf install -y mpv) 2>/dev/null && installed_mpv=1
+    elif command -v pacman >/dev/null 2>&1; then
+      (sudo pacman -S --noconfirm mpv) 2>/dev/null && installed_mpv=1
+    elif command -v zypper >/dev/null 2>&1; then
+      (sudo zypper install -y mpv) 2>/dev/null && installed_mpv=1
+    elif command -v apk >/dev/null 2>&1; then
+      (sudo apk add mpv) 2>/dev/null && installed_mpv=1
+    fi
+  elif [ "$os_id" = "darwin" ]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew install mpv >/dev/null 2>&1 && installed_mpv=1
+    fi
+  fi
+  if [ "$installed_mpv" = "1" ]; then
+    log "mpv installed"
+  else
+    warn "could not install mpv automatically — install it yourself:"
+    if [ "$os_id" = "darwin" ]; then
+      warn "  brew install mpv"
+    else
+      warn "  sudo apt install mpv   (Debian/Ubuntu)"
+      warn "  sudo dnf install mpv   (Fedora)"
+      warn "  sudo pacman -S mpv     (Arch)"
+    fi
+    warn "playback will not work until mpv is present."
+  fi
+else
+  log "mpv found: $(command -v mpv)"
+fi
+
 # --- install location ------------------------------------------------------
 BINDIR="${HOME}/.local/bin"
 BIN_PATH="${BINDIR}/${BIN_NAME}"
@@ -84,7 +124,12 @@ log "installed ${BIN_PATH}"
 
 case ":${PATH}:" in
   *":${BINDIR}:"*) ;;
-  *) warn "${BINDIR} is not on your PATH — add it:  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.profile" ;;
+  *)
+    if [ "$os_id" = "darwin" ]; then
+      warn "${BINDIR} is not on your PATH — add it:  echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zprofile"
+    else
+      warn "${BINDIR} is not on your PATH — add it:  echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.profile"
+    fi ;;
 esac
 
 # --- native messaging manifests --------------------------------------------
@@ -138,8 +183,10 @@ cat <<EOF
        pick manifest.json from the unzipped starhold-extension-firefox.zip
 
   2. Pair with your server
-     - On the Starhold web app: Settings → Companion → start pairing,
-       enter the code when the extension asks for it.
+     - Open the Starhold web app → Settings → Companion → Start pairing.
+       The extension asks for the code on its own — type it in the browser
+       and you are done. (Terminal alternative, no angle brackets, spaces
+       between the parts:  wyrmhoard-companion pair https://your.server YOUR-CODE)
 
   The companion updates itself from GitHub releases automatically
   (opt out with WYRMHOARD_COMPANION_NO_UPDATE=1).

@@ -37,6 +37,15 @@ irm https://raw.githubusercontent.com/Wrecht-Dev/starhold-companion/main/install
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/Wrecht-Dev/starhold-companion/main/install.ps1 | iex"
 ```
 
+Two things to know up front:
+
+- **mpv is the actual decoder.** The installer tries to install it for you
+  (needs `sudo` on Linux; `brew` on macOS). If it could not, install it
+  yourself — one package, any distro.
+- **Naming**: the project is *Starhold*; the binary keeps its historical name
+  `wyrmhoard-companion`. Same thing — the binary name predates the rename.
+  It is the Starhold Companion.
+
 Then two steps remain:
 
 1. **Browser extension** (the native-messaging ID is pre-pinned by the
@@ -48,14 +57,17 @@ Then two steps remain:
    - Firefox: unzip
      [`starhold-extension-firefox.zip`](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)
      → `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
-     pick `manifest.json` from the unzipped folder. (Permanent install lands
-     with AMO signing.)
+     pick `manifest.json` from the unzipped folder. Note: Firefox drops
+     temporary add-ons on every restart — reload it via the same page after
+     restarting the browser. (A permanently-signed install lands once AMO
+     review finishes.)
    - Both extension zips are also served straight from your own server:
      `https://<your-server>/companion-extension.zip` and
      `https://<your-server>/companion-extension-firefox.zip`.
 2. **Pair**: in the Starhold web app open **Settings → Companion** → start
-   pairing → the extension picks it up (or run
-   `wyrmhoard-companion pair <server-url> <code>` from a terminal).
+   pairing. The extension asks for the code by itself — type it in the
+   browser and you are done. (Terminal alternative, no angle brackets:
+   `wyrmhoard-companion pair https://your.server YOUR-CODE`)
 
 Manual install: download a release archive
 ([Releases](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)),
