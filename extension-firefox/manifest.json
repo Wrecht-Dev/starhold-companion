@@ -8,7 +8,7 @@
     "*://localhost/*",
     "*://127.0.0.1/*",
     "https://starhold.space/*",
-    "https://beta.mithraic.cloud/*"
+    "https://starhold.space/*"
   ],
   "content_scripts": [
     {
@@ -16,7 +16,7 @@
         "http://localhost/*",
         "http://127.0.0.1/*",
         "https://starhold.space/*",
-        "https://beta.mithraic.cloud/*"
+        "https://starhold.space/*"
       ],
       "js": [
         "content.js"
