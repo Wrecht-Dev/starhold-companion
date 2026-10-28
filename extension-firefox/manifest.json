@@ -3,16 +3,34 @@
   "name": "Starhold Companion Bridge",
   "version": "0.1.1",
   "description": "Connects the Starhold web app to the local companion player. No tracking, no access outside Starhold origins.",
-  "permissions": ["nativeMessaging", "*://localhost/*", "*://127.0.0.1/*", "https://starhold.space/*", "https://beta.mithraic.cloud/*"],
+  "permissions": [
+    "nativeMessaging",
+    "*://localhost/*",
+    "*://127.0.0.1/*",
+    "https://starhold.space/*",
+    "https://beta.mithraic.cloud/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["http://localhost/*", "http://127.0.0.1/*", "https://starhold.space/*", "https://beta.mithraic.cloud/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://starhold.space/*",
+        "https://beta.mithraic.cloud/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start",
       "all_frames": false
     }
   ],
-  "background": { "scripts": ["background.js"], "persistent": false },
+  "background": {
+    "scripts": [
+      "background.js"
+    ],
+    "persistent": false
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "starhold-companion@starhold.space",
