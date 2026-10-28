@@ -72,8 +72,13 @@ if [ -s "${tmpdir}/checksums.txt" ]; then
 fi
 
 tar -xzf "${tmpdir}/comp.tar.gz" -C "$tmpdir"
-[ -f "${tmpdir}/${BIN_NAME}" ] || die "archive did not contain ${BIN_NAME}"
-mv "${tmpdir}/${BIN_NAME}" "$BIN_PATH"
+BIN_SRC="${tmpdir}/${BIN_NAME}"
+if [ ! -f "$BIN_SRC" ]; then
+  # release archives wrap everything in a top-level directory
+  BIN_SRC=$(find "$tmpdir" -name "$BIN_NAME" -type f | head -1)
+fi
+[ -n "$BIN_SRC" ] && [ -f "$BIN_SRC" ] || die "archive did not contain ${BIN_NAME}"
+mv "$BIN_SRC" "$BIN_PATH"
 chmod 755 "$BIN_PATH"
 log "installed ${BIN_PATH}"
 
