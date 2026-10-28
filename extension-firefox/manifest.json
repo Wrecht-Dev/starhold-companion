@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Starhold Companion Bridge",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Connects the Starhold web app to the local companion player. No tracking, no access outside Starhold origins.",
   "permissions": [
     "nativeMessaging",
