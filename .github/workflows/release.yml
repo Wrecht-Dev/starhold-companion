@@ -31,7 +31,7 @@ jobs:
           cp README.md "pkg/starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}/"
           cd pkg
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip -q -r "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.zip" "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}"
+            powershell -NoProfile -Command "Compress-Archive -Path 'starhold-companion-*' -DestinationPath 'starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.zip' -Force"
           else
             tar czf "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "starhold-companion-${{ matrix.goos }}-${{ matrix.goarch }}"
           fi
