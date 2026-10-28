@@ -53,7 +53,8 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum starhold-companion-* > checksums.txt
+          find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec sha256sum {} + | sed 's#\./##' > checksums.txt
+          cat checksums.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: |
