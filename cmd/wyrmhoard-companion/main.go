@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const version = "0.2.1"
+const version = "0.2.2"
 
 type config struct {
 	Server string `json:"server"`
@@ -119,6 +119,9 @@ func main() {
 		return
 	}
 	selfUpdateLoop()
+	// The loopback control server lets the web app drive the companion with
+	// no browser extension involved; native messaging keeps working too.
+	startControlServer()
 	// Native messaging uses stdin/stdout; logs must go to stderr.
 	in := bufio.NewReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
