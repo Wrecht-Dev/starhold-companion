@@ -93,11 +93,21 @@ type mpv struct {
 var player = &mpv{}
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--version" {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "version") {
 		fmt.Println(version)
 		return
 	}
+	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h" || os.Args[1] == "help") {
+		usage(os.Stdout)
+		return
+	}
 	if runPairCLI() {
+		return
+	}
+	// Launched from a terminal with no arguments: the native-messaging loop
+	// would hang silently waiting for framed input that never comes.
+	if stat, err := os.Stdin.Stat(); err == nil && (stat.Mode()&os.ModeCharDevice) != 0 {
+		usage(os.Stdout)
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "update" {
@@ -536,4 +546,18 @@ func sameServer(base, target string) bool {
 	}
 	bp := strings.TrimRight(b.Path, "/")
 	return bp == "" || t.Path == bp || strings.HasPrefix(t.Path, bp+"/")
+}
+
+// usage prints the terminal-facing commands. The primary interface is the
+// browser extension over native messaging; these are the manual fallbacks.
+func usage(w io.Writer) {
+	fmt.Fprintf(w, `starhold companion %s
+
+Runs as a native-messaging host for the Starhold browser extension.
+Terminal commands:
+
+  pair CODE --server URL   pair this machine with a Starhold server
+  update                   self-update from GitHub releases
+  --version                print the version
+`, version)
 }
