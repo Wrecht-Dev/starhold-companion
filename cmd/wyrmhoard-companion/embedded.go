@@ -128,7 +128,7 @@ func (f *feeder) close() {
 			return
 		}
 		_ = ipc(f.sock, []any{"quit"})
-		_ = f.cmd.Process.Kill()
+		terminateProcess(f.cmd)
 		_ = f.stdout.Close()
 		_ = f.cmd.Wait()
 		_ = os.Remove(f.sock)
@@ -435,6 +435,7 @@ func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
 		"--ofopts-add=movflags=+frag_keyframe+empty_moov+default_base_moof",
 	)
 	f.cmd = exec.Command("mpv", args...)
+	prepareProcess(f.cmd)
 	var errbuf bytes.Buffer
 	f.err = &errbuf
 	f.cmd.Stderr = &errbuf

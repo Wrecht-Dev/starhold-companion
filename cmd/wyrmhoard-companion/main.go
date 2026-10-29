@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const version = "0.2.7"
+const version = "0.2.8"
 
 type config struct {
 	Server string `json:"server"`
@@ -125,6 +125,9 @@ func main() {
 		stopAllEmbedded()
 		player.stop()
 		playbackLifecycle.Unlock()
+		if ctlServer.srv != nil {
+			_ = ctlServer.srv.Close()
+		}
 	}()
 	// The loopback control server lets the web app drive the companion with
 	// no browser extension involved; native messaging keeps working too.
