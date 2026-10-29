@@ -263,8 +263,12 @@ func serveUnpair(w http.ResponseWriter, r *http.Request) {
 	c.Token = ""
 	c.Device = ""
 	if err := saveConfig(c); err != nil {
-		writeJSON(w, response{OK: false, Error: err.Error()})
+		writeJSON(w, response{OK: false, Error: "could not clear pairing"})
 		return
 	}
+	playbackLifecycle.Lock()
+	stopAllEmbedded()
+	player.stop()
+	playbackLifecycle.Unlock()
 	writeJSON(w, response{OK: true, Paired: false})
 }

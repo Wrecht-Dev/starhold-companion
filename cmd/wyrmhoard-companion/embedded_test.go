@@ -120,6 +120,7 @@ func TestEmbeddedStopOnce(t *testing.T) {
 }
 
 func TestPlayEmbeddedUnpaired(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	// no config file in test env → unpaired
 	resp := playEmbedded(request{ID: 1, Type: "play", Embedded: true, ItemID: "x"})
 	if resp.OK || resp.Error != "companion is not paired" {

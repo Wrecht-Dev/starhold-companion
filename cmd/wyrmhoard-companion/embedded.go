@@ -45,15 +45,20 @@ import (
 const (
 	embeddedMaxSessions   = 2                // one active + one warm-over; excess reaps the oldest
 	embeddedOrphanTimeout = 90 * time.Second // never attached → reap (slow pages allowed)
-	embeddedIdleTimeout   = 30 * time.Second // attached, then stopped consuming → reap
+	embeddedIdleTimeout   = 90 * time.Second // attached, then stopped consuming → reap
 	embeddedProgressEvery = 5                // progress POSTs every Nth monitor tick (2s ticks)
 	embeddedIdleWait      = 100 * time.Millisecond
 )
 
 // embeddedSession is one "play in the page" playback: a loopback listener plus
 // at most one encode-mode mpv (the feeder) at a time.
+type feederProcess interface {
+	close()
+}
+
 type embeddedSession struct {
-	mu sync.Mutex
+	mu       sync.Mutex
+	feederMu sync.Mutex
 
 	token string // path secret, per session
 	port  int    // bound loopback port, 0 until listening
@@ -70,15 +75,16 @@ type embeddedSession struct {
 	audioOnly bool
 
 	// live state
-	feeder   *feeder
-	sock     string
-	paused   bool
-	start    float64 // position the next feeder should begin at
-	position float64
-	duration float64
-	ended    bool
-	clients  int // attached stream readers
-	born     time.Time
+	feeder         feederProcess
+	sock           string
+	paused         bool
+	disconnectedAt time.Time
+	start          float64 // position the next feeder should begin at
+	position       float64
+	duration       float64
+	ended          bool
+	clients        int // attached stream readers
+	born           time.Time
 
 	stopOnce sync.Once
 	done     chan struct{} // closed when fully torn down
@@ -86,10 +92,11 @@ type embeddedSession struct {
 
 // feeder is one encode-mode mpv writing fMP4 to a pipe.
 type feeder struct {
-	cmd    *exec.Cmd
-	stdout io.ReadCloser
-	sock   string
-	err    *bytes.Buffer
+	cmd       *exec.Cmd
+	stdout    io.ReadCloser
+	sock      string
+	err       *bytes.Buffer
+	closeOnce sync.Once
 }
 
 // failErr returns the last mpv log lines for error reporting.
@@ -104,15 +111,64 @@ func (f *feeder) failErr(context string) error {
 	if msg == "" {
 		return errors.New(context)
 	}
-	return fmt.Errorf("%s: %s", context, msg)
+	return fmt.Errorf("%s: %s", context, redactLog(msg))
 }
 
 func (f *feeder) close() {
-	if f == nil || f.cmd == nil || f.cmd.Process == nil {
+	if f == nil {
 		return
 	}
-	_ = ipc(f.sock, []any{"quit"})
-	_ = f.cmd.Process.Kill()
+	f.closeOnce.Do(func() {
+		if f.cmd == nil {
+			_ = os.Remove(f.sock)
+			_ = os.Remove(f.sock + ".log")
+			return
+		}
+		if f.cmd.Process == nil {
+			return
+		}
+		_ = ipc(f.sock, []any{"quit"})
+		_ = f.cmd.Process.Kill()
+		_ = f.stdout.Close()
+		_ = f.cmd.Wait()
+		_ = os.Remove(f.sock)
+	})
+}
+
+func (s *embeddedSession) noteClient(delta int) {
+	s.mu.Lock()
+	s.clients += delta
+	if s.clients < 0 {
+		s.clients = 0
+	}
+	if s.clients == 0 {
+		s.disconnectedAt = time.Now()
+	} else {
+		s.disconnectedAt = time.Time{}
+	}
+	s.mu.Unlock()
+}
+
+func (s *embeddedSession) finishFeeder(f feederProcess, err error) {
+	s.mu.Lock()
+	if s.feeder == f {
+		if errors.Is(err, io.EOF) {
+			s.ended = true
+		} else if err != nil {
+			s.feeder = nil
+			f.close()
+		}
+	}
+	s.mu.Unlock()
+}
+
+func (s *embeddedSession) stopped() bool {
+	select {
+	case <-s.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // embedded manages the at-most-N live sessions.
@@ -127,6 +183,11 @@ var embeddedPlayers = &embedded{}
 // stream URL + public session id. mpv itself starts when the page first asks
 // for /stream — one encode process, no local-audio double play.
 func startEmbedded(c config, itemID, channelID, streamPath, title string, start float64, audioOnly bool) (string, string, error) {
+	playbackLifecycle.RLock()
+	defer playbackLifecycle.RUnlock()
+	if loadConfig().Token == "" {
+		return "", "", errors.New("companion is not paired")
+	}
 	if !mpvAvailable() {
 		return "", "", errors.New("mpv is not installed")
 	}
@@ -238,21 +299,26 @@ func (s *embeddedSession) serveStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if r.URL.Path != "/stream/"+s.token {
+		http.NotFound(w, r)
+		return
+	}
 	f, err := s.swapFeeder(s.start)
 	if err != nil {
 		http.Error(w, "feeder failed: "+err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	defer f.close()
-
-	s.mu.Lock()
-	s.clients++
-	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
-		s.clients--
+		current := s.feeder == f
 		s.mu.Unlock()
+		if current {
+			f.close()
+		}
 	}()
+
+	s.noteClient(1)
+	defer s.noteClient(-1)
 
 	w.Header().Set("Content-Type", "video/mp4")
 	w.Header().Set("Cache-Control", "no-store")
@@ -268,21 +334,26 @@ func (s *embeddedSession) serveStream(w http.ResponseWriter, r *http.Request) {
 		if n > 0 {
 			idle = 0
 			if _, werr := w.Write(buf[:n]); werr != nil {
-				// page navigated away or tab closed → tear everything down
-				go s.stop()
-				return
+				return // reader disconnects get a grace period to reconnect
 			}
 			if flusher != nil {
 				flusher.Flush()
 			}
 		}
 		if rerr != nil {
-			if errors.Is(rerr, io.EOF) {
-				s.mu.Lock()
-				s.ended = true
-				s.mu.Unlock()
+			s.finishFeeder(f, rerr)
+			if s.stopped() {
+				return
 			}
-			return
+			s.mu.Lock()
+			target := s.start
+			s.mu.Unlock()
+			next, err := s.swapFeeder(target)
+			if err != nil {
+				return
+			}
+			f = next
+			continue
 		}
 		if n == 0 {
 			// no bytes right now: paused, buffering, or stalled
@@ -308,12 +379,19 @@ func (s *embeddedSession) serveStream(w http.ResponseWriter, r *http.Request) {
 // starting at from. The source URL travels only via IPC loadfile; the device
 // token travels only via an IPC-configured header — neither is in argv.
 func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
+	s.feederMu.Lock()
+	defer s.feederMu.Unlock()
+	if s.stopped() {
+		return nil, errors.New("session stopped")
+	}
 	s.mu.Lock()
 	old := s.feeder
 	s.feeder = nil
 	s.sock = ""
 	s.mu.Unlock()
-	old.close()
+	if old != nil {
+		old.close()
+	}
 
 	f := &feeder{}
 	dir := os.TempDir()
@@ -368,6 +446,10 @@ func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
 	if err := f.cmd.Start(); err != nil {
 		return nil, fmt.Errorf("feeder start: %w", err)
 	}
+	if err := privateFile(f.sock + ".log"); err != nil {
+		f.close()
+		return nil, errors.New("could not secure feeder log")
+	}
 	if err := waitSocket(f.sock, 5*time.Second); err != nil {
 		f.close()
 		return nil, f.failErr("feeder IPC did not start")
@@ -392,11 +474,18 @@ func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
 		f.close()
 		return nil, f.failErr("could not load source in feeder")
 	}
+	if s.stopped() {
+		f.close()
+		return nil, errors.New("session stopped")
+	}
 	s.mu.Lock()
 	s.feeder = f
 	s.sock = f.sock
-	s.paused = false
+	paused := s.paused
 	s.mu.Unlock()
+	if paused {
+		_ = ipc(f.sock, []any{"set_property", "pause", true})
+	}
 	return f, nil
 }
 
@@ -435,12 +524,7 @@ func (s *embeddedSession) serveControl(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad value", http.StatusBadRequest)
 			return
 		}
-		s.mu.Lock()
-		s.start = req.Value
-		s.ended = false
-		f := s.feeder
-		s.mu.Unlock()
-		f.close() // ends the current stream; page reconnects at the new spot
+		s.seek(req.Value)
 		restart = true
 	case "position":
 		// read-only poll; state below comes from the monitor
@@ -453,6 +537,21 @@ func (s *embeddedSession) serveControl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeControlState(w, s, restart)
+}
+
+func (s *embeddedSession) seek(seconds float64) {
+	s.feederMu.Lock()
+	defer s.feederMu.Unlock()
+	s.mu.Lock()
+	s.start = seconds
+	s.ended = false
+	f := s.feeder
+	s.feeder = nil
+	s.sock = ""
+	s.mu.Unlock()
+	if f != nil {
+		f.close()
+	}
 }
 
 func writeControlState(w http.ResponseWriter, s *embeddedSession, restart bool) {
@@ -499,6 +598,7 @@ func (s *embeddedSession) monitor() {
 		s.mu.Lock()
 		ended := s.ended
 		clients := s.clients
+		disconnectedAt := s.disconnectedAt
 		if clients > 0 {
 			everClient = true
 		}
@@ -509,8 +609,7 @@ func (s *embeddedSession) monitor() {
 			s.stop()
 			return
 		}
-		if everClient && clients == 0 {
-			// attached, then stopped consuming → orphan
+		if everClient && clients == 0 && !disconnectedAt.IsZero() && time.Since(disconnectedAt) > embeddedIdleTimeout {
 			s.stop()
 			return
 		}
@@ -538,7 +637,7 @@ func (s *embeddedSession) reportProgress(state string) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.srcToken)
-	if resp, err := http.DefaultClient.Do(req); err == nil {
+	if resp, err := companionClient.Do(req); err == nil {
 		_ = resp.Body.Close()
 	}
 }
@@ -546,17 +645,23 @@ func (s *embeddedSession) reportProgress(state string) {
 // stop tears down the feeder and the listener exactly once.
 func (s *embeddedSession) stop() {
 	s.stopOnce.Do(func() {
+		close(s.done)
+		s.feederMu.Lock()
 		s.mu.Lock()
 		f := s.feeder
+		s.feeder = nil
+		s.sock = ""
 		s.mu.Unlock()
-		f.close()
+		s.feederMu.Unlock()
+		if f != nil {
+			f.close()
+		}
 		if s.srv != nil {
 			_ = s.srv.Close()
 		}
 		if s.ln != nil {
 			_ = s.ln.Close()
 		}
-		close(s.done)
 	})
 }
 
@@ -582,7 +687,7 @@ func playEmbedded(req request) response {
 	httpReq, _ := http.NewRequest("POST", c.Server+"/api/v1/companion/playback", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.Token)
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := companionClient.Do(httpReq)
 	if err != nil {
 		return response{ID: req.ID, OK: false, Error: "cannot reach server"}
 	}
@@ -626,7 +731,7 @@ func sessionByID(id string) *embeddedSession {
 			continue
 		default:
 		}
-		if strings.HasPrefix(s.token, id) {
+		if s.token == id || (len(id) == 8 && s.token[:8] == id) {
 			return s
 		}
 	}
@@ -672,6 +777,12 @@ func embeddedControl(req request) response {
 	case "stop":
 		s.stop()
 		return response{ID: req.ID, OK: true, State: "stopped"}
+	case "seek":
+		seconds, ok := toFloat(req.Value)
+		if !ok || seconds < 0 || seconds > 24*3600 {
+			return response{ID: req.ID, OK: false, Error: "invalid seek position"}
+		}
+		s.seek(seconds)
 	case "position":
 		// read-only poll
 	default:

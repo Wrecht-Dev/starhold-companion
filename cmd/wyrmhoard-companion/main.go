@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const version = "0.2.6"
+const version = "0.2.7"
 
 type config struct {
 	Server string `json:"server"`
@@ -119,6 +119,13 @@ func main() {
 		return
 	}
 	selfUpdateLoop()
+	cleanupFeederArtifacts()
+	defer func() {
+		playbackLifecycle.Lock()
+		stopAllEmbedded()
+		player.stop()
+		playbackLifecycle.Unlock()
+	}()
 	// The loopback control server lets the web app drive the companion with
 	// no browser extension involved; native messaging keeps working too.
 	startControlServer()
@@ -187,7 +194,10 @@ func saveConfig(c config) error {
 		return err
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
-	return os.WriteFile(p, b, 0o600)
+	if err := os.WriteFile(p, b, 0o600); err != nil {
+		return err
+	}
+	return privateFile(p)
 }
 
 func validateServer(raw string) (string, error) {
@@ -235,7 +245,12 @@ func pair(req request) response {
 	body, _ := json.Marshal(map[string]string{
 		"code": strings.TrimSpace(req.Code), "name": hostname(), "platform": runtime.GOOS + "/" + runtime.GOARCH, "version": version,
 	})
-	resp, err := http.Post(server+"/api/v1/companion/pair/complete", "application/json", bytes.NewReader(body))
+	httpReq, err := http.NewRequest("POST", server+"/api/v1/companion/pair/complete", bytes.NewReader(body))
+	if err != nil {
+		return response{ID: req.ID, OK: false, Error: "cannot create pairing request"}
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := companionClient.Do(httpReq)
 	if err != nil {
 		return response{ID: req.ID, OK: false, Error: "cannot reach server"}
 	}
@@ -284,7 +299,7 @@ func play(req request) response {
 	httpReq, _ := http.NewRequest("POST", c.Server+"/api/v1/companion/playback", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.Token)
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := companionClient.Do(httpReq)
 	if err != nil {
 		return response{ID: req.ID, OK: false, Error: "cannot reach server"}
 	}
@@ -306,7 +321,12 @@ func play(req request) response {
 	if !sameServer(c.Server, stream) {
 		return response{ID: req.ID, OK: false, Error: "server returned an invalid stream URL"}
 	}
+	playbackLifecycle.Lock()
+	defer playbackLifecycle.Unlock()
 	player.stop()
+	if loadConfig().Token == "" {
+		return response{ID: req.ID, OK: false, Error: "companion is not paired"}
+	}
 	if err := player.start(c, itemID, stream, req.Title, start); err != nil {
 		return response{ID: req.ID, OK: false, Error: err.Error()}
 	}
@@ -452,7 +472,7 @@ func (m *mpv) progress() {
 		req, _ := http.NewRequest("POST", server+"/api/v1/companion/playback", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
-		if resp, err := http.DefaultClient.Do(req); err == nil {
+		if resp, err := companionClient.Do(req); err == nil {
 			resp.Body.Close()
 		}
 	}
