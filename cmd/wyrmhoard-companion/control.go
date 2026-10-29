@@ -59,6 +59,7 @@ func startControlServer() {
 	mux.HandleFunc("/control", ctlServer.guard(false, serveControl))
 	mux.HandleFunc("/state", ctlServer.guard(false, serveState))
 	mux.HandleFunc("/stop", ctlServer.guard(false, serveStop))
+	mux.HandleFunc("/unpair", ctlServer.guard(false, serveUnpair))
 	for _, p := range strings.Split(ports, ",") {
 		port, err := strconv.Atoi(strings.TrimSpace(p))
 		if err != nil {
@@ -252,4 +253,18 @@ func serveState(w http.ResponseWriter, _ *http.Request) {
 
 func serveStop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, embeddedStop(request{}))
+}
+
+// serveUnpair clears the stored device token so the companion reports itself
+// unpaired immediately (the web UI's Unpair button calls this after revoking
+// the device server-side).
+func serveUnpair(w http.ResponseWriter, r *http.Request) {
+	c := loadConfig()
+	c.Token = ""
+	c.Device = ""
+	if err := saveConfig(c); err != nil {
+		writeJSON(w, response{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, response{OK: true, Paired: false})
 }
