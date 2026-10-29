@@ -18,11 +18,17 @@ set -eu
 REPO="Wrecht-Dev/starhold-companion"
 BIN_NAME="wyrmhoard-companion"
 MANIFEST_ID="cloud.mithraic.wyrmhoard_companion"
-VERSION="0.2.0"
+VERSION="${WYRMHOARD_COMPANION_VERSION:-}"
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+# --- resolve version (latest release unless pinned) ------------------------
+if [ -z "$VERSION" ]; then
+  VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -n1)
+fi
+[ -n "$VERSION" ] || VERSION="0.2.1"
 
 # --- detect platform -------------------------------------------------------
 os=$(uname -s)
