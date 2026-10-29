@@ -122,6 +122,19 @@ func (cs *controlServer) guard(pairMode bool, next func(http.ResponseWriter, *ht
 			return
 		}
 		origin := r.Header.Get("Origin")
+		// Preflight short-circuits FIRST: browsers must receive a clean 204
+		// with CORS headers even when the companion is unpaired, otherwise
+		// the POST that follows can never happen.
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		if origin != "" {
 			allowed := pairedOrigin()
 			if allowed == "" {
@@ -141,19 +154,6 @@ func (cs *controlServer) guard(pairMode bool, next func(http.ResponseWriter, *ht
 			}
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			// Reflect ACAO on preflights that return early below.
-			if r.Method == http.MethodOptions {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-		}
-		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			w.WriteHeader(http.StatusNoContent)
-			return
 		}
 		if !cs.allow(r) {
 			http.Error(w, "too many requests", http.StatusTooManyRequests)
