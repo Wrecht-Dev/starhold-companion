@@ -323,8 +323,14 @@ func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
 
 	args := []string{
 		// Encode mode: nothing touches real devices — decode feeds the
-		// encoder, so both outputs are disabled (no local audio echo either).
-		"--no-terminal", "--force-window=no", "--vo=null", "--ao=null",
+		// encoder, so neither output is used. Do NOT pass --vo/--ao here:
+		// mpv remaps them to the encoder internally, and overriding them
+		// (e.g. --ao=null) breaks encode-mode audio init entirely — the
+		// feeder then stalls ~25s and dies with audio=eof/video=eof.
+		"--no-terminal", "--force-window=no",
+		// ytdl_hook would fire an extra unauthenticated fetch of the source
+		// URL and slow the open by seconds for no benefit.
+		"--ytdl=no",
 		"--idle=yes", "--no-input-default-bindings",
 		"--input-ipc-server=" + f.sock,
 		"--user-agent=Starhold-Companion/" + version,
@@ -341,7 +347,10 @@ func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
 		"--ovc=libx264", "--oac=aac",
 		"--ovcopts-add=preset=veryfast", "--ovcopts-add=crf=23",
 		"--ovcopts-add=maxrate=8M", "--ovcopts-add=bufsize=16M",
-		"--vf-add=format=yuv420p",
+		// Playback path, not archival: halve the encode cost (720p) and
+		// disable x264 lookahead so the first frames ship immediately.
+		"--vf-add=format=yuv420p,scale=-2:720",
+		"--ovcopts-add=tune=zerolatency",
 		"--oacopts-add=b=192k",
 		// Fragmented MP4 must be set on the MUXER (of), not the video
 		// encoder — this is what makes the mp4 muxer accept a pipe.
@@ -363,7 +372,19 @@ func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
 		f.close()
 		return nil, f.failErr("feeder IPC did not start")
 	}
-	if err := ipc(f.sock, []any{"set_property", "http-header-fields", []string{"Authorization: Bearer " + s.srcToken}}); err != nil {
+	// mpv creates the socket file slightly before it starts serving it; a
+	// naive first write lands in that window and dies with EPIPE (observed as
+	// "Write error (Broken pipe)" and a feeder that never loads). Retry the
+	// handshake until mpv answers.
+	var ipcerr error
+	for i := 0; i < 25; i++ {
+		ipcerr = ipc(f.sock, []any{"set_property", "http-header-fields", []string{"Authorization: Bearer " + s.srcToken}})
+		if ipcerr == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if ipcerr != nil {
 		f.close()
 		return nil, f.failErr("could not configure feeder headers")
 	}
