@@ -73,6 +73,11 @@ type embeddedSession struct {
 	srcToken  string // device token for the Authorization header
 	title     string
 	audioOnly bool
+	// subtitleIndex is the ffmpeg subtitle stream index selected by the page;
+	// subtitleSID is the mpv track id it maps to for --sid. mpv burns that
+	// track into the fMP4, so the browser needs no VTT fetch.
+	subtitleIndex int
+	subtitleSID   int
 
 	// live state
 	feeder         feederProcess
@@ -182,7 +187,7 @@ var embeddedPlayers = &embedded{}
 // startEmbedded validates mpv, binds the loopback relay, and returns the local
 // stream URL + public session id. mpv itself starts when the page first asks
 // for /stream — one encode process, no local-audio double play.
-func startEmbedded(c config, itemID, channelID, streamPath, title string, start float64, audioOnly bool) (string, string, error) {
+func startEmbedded(c config, itemID, channelID, streamPath, title string, start float64, audioOnly bool, subtitleTrack int) (string, string, error) {
 	playbackLifecycle.RLock()
 	defer playbackLifecycle.RUnlock()
 	if loadConfig().Token == "" {
@@ -214,18 +219,19 @@ func startEmbedded(c config, itemID, channelID, streamPath, title string, start 
 		return "", "", err
 	}
 	s := &embeddedSession{
-		token:     hex.EncodeToString(tok),
-		itemID:    itemID,
-		channelID: channelID,
-		server:    c.Server,
-		origin:    serverOrigin(c.Server),
-		srcURL:    streamPath,
-		srcToken:  c.Token,
-		title:     title,
-		audioOnly: audioOnly,
-		start:     start,
-		born:      time.Now(),
-		done:      make(chan struct{}),
+		token:         hex.EncodeToString(tok),
+		itemID:        itemID,
+		channelID:     channelID,
+		server:        c.Server,
+		origin:        serverOrigin(c.Server),
+		srcURL:        streamPath,
+		srcToken:      c.Token,
+		title:         title,
+		audioOnly:     audioOnly,
+		subtitleIndex: subtitleTrack,
+		start:         start,
+		born:          time.Now(),
+		done:          make(chan struct{}),
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -414,6 +420,27 @@ func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
 		"--user-agent=Starhold-Companion/" + version,
 		"--log-file=" + f.sock + ".log",
 	}
+	// Select the page's subtitle before encoding starts. ffmpeg stream indexes
+	// are not mpv --sid ids, so resolve the id with a short header-only probe,
+	// then burn that track into the fMP4. No VTT extraction is needed.
+	s.mu.Lock()
+	subIndex, subSID := s.subtitleIndex, s.subtitleSID
+	s.mu.Unlock()
+	if subIndex > 0 && subSID == 0 {
+		subSID = resolveSubtitleSID(s.srcURL, s.srcToken, subIndex)
+		if subSID > 0 {
+			s.mu.Lock()
+			if s.subtitleIndex == subIndex {
+				s.subtitleSID = subSID
+			}
+			s.mu.Unlock()
+		}
+	}
+	if subSID > 0 {
+		args = append(args, fmt.Sprintf("--sid=%d", subSID))
+	} else {
+		args = append(args, "--sid=no")
+	}
 	if s.audioOnly {
 		args = append(args, "--no-video")
 	}
@@ -527,6 +554,12 @@ func (s *embeddedSession) serveControl(w http.ResponseWriter, r *http.Request) {
 		}
 		s.seek(req.Value)
 		restart = true
+	case "subtitle":
+		idx := int(req.Value)
+		s.mu.Lock()
+		s.subtitleIndex = idx
+		s.subtitleSID = 0
+		s.mu.Unlock()
 	case "position":
 		// read-only poll; state below comes from the monitor
 	case "stop":
@@ -557,7 +590,8 @@ func (s *embeddedSession) seek(seconds float64) {
 
 func writeControlState(w http.ResponseWriter, s *embeddedSession, restart bool) {
 	s.mu.Lock()
-	st := map[string]any{"position": s.position, "duration": s.duration, "paused": s.paused, "ended": s.ended}
+	st := map[string]any{"position": s.position, "duration": s.duration, "paused": s.paused, "ended": s.ended,
+		"subtitle_track": s.subtitleIndex}
 	s.mu.Unlock()
 	if restart {
 		st["restart"] = true
@@ -712,7 +746,7 @@ func playEmbedded(req request) response {
 	}
 	// one active playback at a time: windowed loses to embedded
 	player.stop()
-	url, sid, err := startEmbedded(c, itemID, channelID, stream, req.Title, req.Start, req.AudioOnly)
+	url, sid, err := startEmbedded(c, itemID, channelID, stream, req.Title, req.Start, req.AudioOnly, req.SubtitleTrack)
 	if err != nil {
 		return response{ID: req.ID, OK: false, Error: err.Error()}
 	}

@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const version = "0.2.8"
+const version = "0.2.9"
 
 type config struct {
 	Server string `json:"server"`
@@ -51,6 +51,9 @@ type request struct {
 	// fMP4 stream consumed by the web app's own <video> element; no window).
 	Embedded  bool `json:"embedded,omitempty"`
 	AudioOnly bool `json:"audio_only,omitempty"`
+	// SubtitleTrack is mpv's subtitle track id (the page's subtitle ordinal).
+	// Zero means subtitles off.
+	SubtitleTrack int `json:"subtitle_track,omitempty"`
 }
 
 type response struct {
@@ -99,6 +102,13 @@ func main() {
 	}
 	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h" || os.Args[1] == "help") {
 		usage(os.Stdout)
+		return
+	}
+	// "serve" is the systemd/background mode: loopback control server only,
+	// with no native-messaging stdin loop. A stdio-launched companion still
+	// uses the native-messaging loop below.
+	if len(os.Args) > 1 && os.Args[1] == "serve" {
+		serveMode()
 		return
 	}
 	if runPairCLI() {
