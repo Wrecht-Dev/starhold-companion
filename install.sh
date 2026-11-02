@@ -16,9 +16,9 @@
 set -eu
 
 REPO="Wrecht-Dev/starhold-companion"
-BIN_NAME="wyrmhoard-companion"
-MANIFEST_ID="cloud.mithraic.wyrmhoard_companion"
-VERSION="${WYRMHOARD_COMPANION_VERSION:-}"
+BIN_NAME="starhold-companion"
+MANIFEST_ID="cloud.mithraic.starhold_companion"
+VERSION="${STARHOLD_COMPANION_VERSION:-}"
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }
@@ -301,9 +301,9 @@ cat <<EOF
   Pair with your server
   - Open the Starhold web app -> Settings -> Companion -> Start pairing.
   - The extension asks for the code on its own; type it in the browser.
-  - Terminal alternative:  wyrmhoard-companion pair ${SERVER} YOUR-CODE
+  - Terminal alternative:  starhold-companion pair ${SERVER} YOUR-CODE
 
   The companion updates itself from GitHub releases automatically
-  (opt out with WYRMHOARD_COMPANION_NO_UPDATE=1).
+  (opt out with STARHOLD_COMPANION_NO_UPDATE=1).
 
 EOF

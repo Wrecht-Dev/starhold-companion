@@ -42,9 +42,7 @@ Two things to know up front:
 - **mpv is the actual decoder.** The installer tries to install it for you
   (needs `sudo` on Linux; `brew` on macOS). If it could not, install it
   yourself — one package, any distro.
-- **Naming**: the project is *Starhold*; the binary keeps its historical name
-  `wyrmhoard-companion`. Same thing — the binary name predates the rename.
-  It is the Starhold Companion.
+- **Naming**: the binary and native host are named `starhold-companion`.
 
 The installer also sets up the browser extension for you. It writes the
 browser's enterprise policy so the extension is **force-installed from a
@@ -78,12 +76,12 @@ installer had no admin rights it prints the exact two-line manual fallback.
 **Pair**: in the Starhold web app open **Settings → Companion** → start
 pairing. The extension asks for the code by itself — type it in the browser
 and you are done. (Terminal alternative, no angle brackets:
-`wyrmhoard-companion pair https://your.server YOUR-CODE`)
+`starhold-companion pair https://your.server YOUR-CODE`)
 
 Manual install: download a release archive
 ([Releases](https://github.com/Wrecht-Dev/starhold-companion/releases/latest)),
 unpack the binary onto your PATH, and copy
-`packaging/cloud.mithraic.wyrmhoard_companion.json` into your browser's
+`packaging/cloud.mithraic.starhold_companion.json` into your browser's
 `NativeMessagingHosts` directory with the binary path filled in.
 
 Building the self-hosted extension package yourself:
@@ -122,16 +120,16 @@ the original bytes (zero re-encode). The web player offers whichever mode fits
 
 ## Auto-updates
 
-The companion checks GitHub releases once a day (and offers `wyrmhoard-companion
+The companion checks GitHub releases once a day (and offers `starhold-companion
 update` to force it). Updates are verified against the published
 `checksums.txt` and swapped in atomically; a running mpv is never interrupted —
 the new version is picked up the next time the browser starts the host.
-Set `WYRMHOARD_COMPANION_NO_UPDATE=1` to pin a version (managed installs).
+Set `STARHOLD_COMPANION_NO_UPDATE=1` to pin a version (managed installs).
 
 ## Build from source
 
 ```sh
-go build -o wyrmhoard-companion ./cmd/wyrmhoard-companion
+go build -o starhold-companion ./cmd/starhold-companion
 ```
 
 Releases are built automatically by GitHub Actions on tagged versions.

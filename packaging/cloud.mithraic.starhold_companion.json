@@ -1,7 +1,7 @@
 {
-  "name": "cloud.mithraic.wyrmhoard_companion",
+  "name": "cloud.mithraic.starhold_companion",
   "description": "Starhold companion player",
-  "path": "/usr/local/bin/wyrmhoard-companion",
+  "path": "/usr/local/bin/starhold-companion",
   "type": "stdio",
   "allowed_origins": [
     "chrome-extension://dgcgodfjhghjbmmgehkgkgnoleacdimf/"

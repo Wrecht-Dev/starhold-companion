@@ -37,7 +37,7 @@ func TestConfigIsPrivate(t *testing.T) {
 	if err := saveConfig(c); err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(filepath.Join(dir, "wyrmhoard", "companion.json"))
+	info, err := os.Stat(filepath.Join(dir, "starhold", "companion.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

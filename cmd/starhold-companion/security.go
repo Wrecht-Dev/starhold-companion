@@ -63,7 +63,7 @@ func cleanupFeederArtifacts() {
 	cutoff := time.Now().Add(-24 * time.Hour)
 	for _, entry := range entries {
 		name := entry.Name()
-		if len(name) < 16 || name[:16] != "wyrmhoard-feed-" {
+		if len(name) < 16 || name[:16] != "starhold-feed-" {
 			continue
 		}
 		info, err := entry.Info()

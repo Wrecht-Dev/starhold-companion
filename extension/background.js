@@ -1,6 +1,6 @@
 // Native-messaging bridge. The host is limited to the Starhold companion by the
 // native messaging manifest (allowed_origins), not by a network port.
-const HOST = 'cloud.mithraic.wyrmhoard_companion';
+const HOST = 'cloud.mithraic.starhold_companion';
 let port = null;
 let seq = 0;
 const pending = new Map();
@@ -29,7 +29,7 @@ function connect() {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg || msg.channel !== 'wyrmhoard-companion') return false;
+  if (!msg || msg.channel !== 'starhold-companion') return false;
   const p = connect();
   if (!p) { sendResponse({ ok: false, error: 'companion is not installed' }); return false; }
   const id = ++seq;

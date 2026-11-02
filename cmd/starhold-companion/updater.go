@@ -8,7 +8,7 @@ package main
 // the browser, so the swap takes effect next session; a playing mpv is never
 // touched.
 //
-// Disable with WYRMHOARD_COMPANION_NO_UPDATE=1 (managed installs).
+// Disable with STARHOLD_COMPANION_NO_UPDATE=1 (managed installs).
 
 import (
 	"archive/tar"
@@ -46,7 +46,7 @@ type ghAsset struct {
 }
 
 func updatesDisabled() bool {
-	for _, k := range []string{"WYRMHOARD_COMPANION_NO_UPDATE", "WYRMHOARD_COMPANION_SKIP_UPDATE"} {
+	for _, k := range []string{"STARHOLD_COMPANION_NO_UPDATE", "STARHOLD_COMPANION_SKIP_UPDATE"} {
 		if v, ok := os.LookupEnv(k); ok && v != "" && v != "0" && v != "false" {
 			return true
 		}
@@ -241,8 +241,8 @@ func unpackTarGz(archive, dir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if filepath.Base(hdr.Name) == "wyrmhoard-companion" && hdr.Typeflag == tar.TypeReg {
-			out := filepath.Join(dir, "wyrmhoard-companion.new")
+		if filepath.Base(hdr.Name) == "starhold-companion" && hdr.Typeflag == tar.TypeReg {
+			out := filepath.Join(dir, "starhold-companion.new")
 			o, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 			if err != nil {
 				return "", err
@@ -264,13 +264,13 @@ func unpackZip(archive, dir string) (string, error) {
 	}
 	defer zr.Close()
 	for _, zf := range zr.File {
-		if filepath.Base(zf.Name) == "wyrmhoard-companion.exe" {
+		if filepath.Base(zf.Name) == "starhold-companion.exe" {
 			rc, err := zf.Open()
 			if err != nil {
 				return "", err
 			}
 			defer rc.Close()
-			out := filepath.Join(dir, "wyrmhoard-companion.new.exe")
+			out := filepath.Join(dir, "starhold-companion.new.exe")
 			o, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 			if err != nil {
 				return "", err

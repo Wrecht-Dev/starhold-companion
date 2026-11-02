@@ -1,4 +1,4 @@
-// wyrmhoard-companion is a small native-messaging host that plays the original
+// starhold-companion is a small native-messaging host that plays the original
 // file through an installed mpv process. It never transcodes and never exposes
 // a local network port to web pages.
 package main
@@ -189,7 +189,7 @@ func configPath() string {
 	if err != nil {
 		dir = "."
 	}
-	return filepath.Join(dir, "wyrmhoard", "companion.json")
+	return filepath.Join(dir, "starhold", "companion.json")
 }
 
 func loadConfig() config {
@@ -404,7 +404,7 @@ func (m *mpv) start(c config, itemID, stream, title string, start float64) error
 	dir := os.TempDir()
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
-	sock := filepath.Join(dir, "wyrmhoard-mpv-"+hex.EncodeToString(b)+".sock")
+	sock := filepath.Join(dir, "starhold-mpv-"+hex.EncodeToString(b)+".sock")
 	// Launch mpv without the URL or device token in argv (both are visible in
 	// the process list). Configure the header over the private IPC socket and
 	// only then load the server-issued URL.

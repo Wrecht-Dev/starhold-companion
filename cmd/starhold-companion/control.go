@@ -5,7 +5,7 @@ package main
 //
 // Safety model (mirrors embedded.go and must never regress):
 //   - Binds 127.0.0.1 on a small fixed port range (default 8955, then
-//     8956-8959; WYRMHOARD_COMPANION_PORT pins one). Never a wildcard.
+//     8956-8959; STARHOLD_COMPANION_PORT pins one). Never a wildcard.
 //   - Every request must arrive with Host 127.0.0.1 / localhost / [::1] —
 //     this kills DNS-rebinding pages that point a name at 127.0.0.1.
 //   - Origin is checked: /pair only accepts when the Origin host matches the
@@ -45,7 +45,7 @@ var ctlServer = &controlServer{attempts: map[string][]time.Time{}}
 // A failure to bind every candidate is non-fatal: native messaging keeps
 // working, only the extension-free path disappears.
 func startControlServer() {
-	spec := os.Getenv("WYRMHOARD_COMPANION_PORT")
+	spec := os.Getenv("STARHOLD_COMPANION_PORT")
 	ports := controlPorts
 	if spec != "" {
 		if _, err := strconv.Atoi(spec); err == nil {

@@ -1,5 +1,5 @@
 (() => {
-  const MARK = 'wyrmhoard-companion';
+  const MARK = 'starhold-companion';
   const allowed = new Set([location.origin]);
   function reply(id, payload) {
     window.postMessage({ channel: MARK, direction: 'to-page', id, ...payload }, location.origin);

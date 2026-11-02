@@ -21,11 +21,11 @@ func TestCompareSemver(t *testing.T) {
 }
 
 func TestUpdatesDisabled(t *testing.T) {
-	t.Setenv("WYRMHOARD_COMPANION_NO_UPDATE", "1")
+	t.Setenv("STARHOLD_COMPANION_NO_UPDATE", "1")
 	if !updatesDisabled() {
 		t.Fatal("env flag should disable updates")
 	}
-	t.Setenv("WYRMHOARD_COMPANION_NO_UPDATE", "")
+	t.Setenv("STARHOLD_COMPANION_NO_UPDATE", "")
 	if updatesDisabled() {
 		t.Fatal("empty flag should not disable updates")
 	}

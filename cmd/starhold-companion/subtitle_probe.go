@@ -50,7 +50,7 @@ func resolveSubtitleSID(srcURL, token string, ffIndex int) int {
 	}
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
-	sock := os.TempDir() + "/wyrmhoard-probe-" + fmt.Sprintf("%x", b) + ".sock"
+	sock := os.TempDir() + "/starhold-probe-" + fmt.Sprintf("%x", b) + ".sock"
 	args := []string{
 		"--no-terminal", "--force-window=no", "--no-config", "--ytdl=no",
 		"--idle=yes", "--no-input-default-bindings",

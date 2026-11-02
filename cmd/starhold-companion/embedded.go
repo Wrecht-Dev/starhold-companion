@@ -403,7 +403,7 @@ func (s *embeddedSession) swapFeeder(from float64) (*feeder, error) {
 	dir := os.TempDir()
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
-	f.sock = dir + "/wyrmhoard-feed-" + hex.EncodeToString(b) + ".sock"
+	f.sock = dir + "/starhold-feed-" + hex.EncodeToString(b) + ".sock"
 
 	args := []string{
 		// Encode mode: nothing touches real devices — decode feeds the

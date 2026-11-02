@@ -15,8 +15,8 @@
 $ErrorActionPreference = 'Stop'
 
 $Repo = 'Wrecht-Dev/starhold-companion'
-$BinName = 'wyrmhoard-companion.exe'
-$ManifestId = 'cloud.mithraic.wyrmhoard_companion'
+$BinName = 'starhold-companion.exe'
+$ManifestId = 'cloud.mithraic.starhold_companion'
 $ExtId = 'dgcgodfjhghjbmmgehkgkgnoleacdimf'
 $Server = if ($env:STARHOLD_SERVER) { $env:STARHOLD_SERVER.TrimEnd('/') } else { 'https://starhold.space' }
 $UpdateUrl = "$Server/companion/update.xml"
@@ -152,7 +152,7 @@ if ($policyWritten -gt 0) {
 Write-Host ''
 Write-Host '  Pair with your server'
 Write-Host '  - Starhold web app: Settings > Companion > start pairing'
-Write-Host "  - or:  $InstallDir\\wyrmhoard-companion.exe pair $Server YOUR-CODE"
+Write-Host "  - or:  $InstallDir\\starhold-companion.exe pair $Server YOUR-CODE"
 Write-Host ''
 Write-Host '  The companion updates itself from GitHub releases automatically'
-Write-Host '  (opt out with WYRMHOARD_COMPANION_NO_UPDATE=1).'
+Write-Host '  (opt out with STARHOLD_COMPANION_NO_UPDATE=1).'
